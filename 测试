@@ -1,0 +1,208 @@
+//@version=5
+strategy(title="RSI and MA Strategy", overlay=true, margin_long=100, margin_short=100)
+
+// === Inputs ===
+rsi_length = input.int(title="RSI Length", defval=14, minval=1)
+ma_length = input.int(title="MA Length", defval=20, minval=1)
+tp_multiplier = input.float(title="Take Profit Multiplier", defval=1.5, minval=0.01, step=0.01)
+sl_multiplier = input.float(title="Stop Loss Multiplier", defval=1.0, minval=0.01, step=0.01)
+risk_percent = input.float(title="Risk Percent", defval=30.0, minval=0.01, step=0.01)
+
+// === Indicators ===
+rsi_value = ta.rsi(close, rsi_length)
+ma_value = ta.sma(close, ma_length)
+
+// === Trading Conditions ===
+
+// Long Entry: RSI crosses above 50 and price crosses above MA
+long_entry = crossover(rsi_value, 50) and crossover(close, ma_value)
+
+// Short Entry: RSI crosses below 50 and price crosses below MA
+short_entry = crossunder(rsi_value, 50) and crossunder(close, ma_value)
+
+// Exit: Take Profit and Stop Loss
+tp_price = strategy.position_avg_price * tp_multiplier
+sl_price = strategy.position_avg_price * sl_multiplier
+strategy.exit(id="TP", limit=tp_price, when=strategy.position_size > 0)
+strategy.exit(id="SL", stop=sl_price, when=strategy.position_size > 0)
+
+// === Position Sizing ===
+risk_amount = strategy.equity * risk_percent / 100
+entry_price = close
+
+if long_entry
+    // Calculate position size based on risk amount and stop loss distance
+    stop_distance = entry_price - sl_price
+    position_size = risk_amount / stop_distance
+    strategy.entry(id="Long", long=true, size=position_size, comment="RSI Long")
+    
+if short_entry
+    // Calculate position size based on risk amount and stop loss distance
+    stop_distance = sl_price - entry_price
+    position_size = risk_amount / stop_distance
+    strategy.entry(id="Short", long=false, size=position_size, comment="RSI Short")
+
+//@version=5
+strategy("My Strategy", overlay=true)
+
+// 输入参数
+max_risk = input(0.3, title='最大风险承受比例')
+stop_loss_pct = input(0.1, title='最大亏损比例')
+take_profit_pct = input(0.15, title='最大盈利比例')
+
+// 定义变量
+entry_price = 0.0
+stop_loss_price = 0.0
+take_profit_price = 0.0
+risk_amt = 0.0
+
+// 计算MA
+fast_ma = sma(close, 20)
+slow_ma = sma(close, 50)
+
+// 确认入场条件
+entry_long = crossover(fast_ma, slow_ma)
+entry_short = crossunder(fast_ma, slow_ma)
+
+// 入场逻辑
+if entry_long
+    // 计算最大亏损金额和订单数量
+    risk_amt := strategy.equity * max_risk * stop_loss_pct
+    qty := risk_amt / (entry_price - stop_loss_price)
+
+    // 计算止损和止盈价格
+    stop_loss_price := entry_price * (1 - stop_loss_pct)
+    take_profit_price := entry_price * (1 + take_profit_pct)
+
+    // 下单并记录订单信息
+    strategy.entry("Long", strategy.long, qty, when=entry_long)
+    entry_price := strategy.position_avg_price
+
+if entry_short
+    // 计算最大亏损金额和订单数量
+    risk_amt := strategy.equity * max_risk * stop_loss_pct
+    qty := risk_amt / (stop_loss_price - entry_price)
+
+    // 计算止损和止盈价格
+    stop_loss_price := entry_price * (1 + stop_loss_pct)
+    take_profit_price := entry_price * (1 - take_profit_pct)
+
+    // 下单并记录订单信息
+    strategy.entry("Short", strategy.short, qty, when=entry_short)
+    entry_price := strategy.position_avg_price
+
+// 确认出场条件
+exit_long = (strategy.position_size > 0) and (crossunder(fast_ma, slow_ma) or (strategy.position_avg_price <= stop_loss_price) or (strategy.position_avg_price >= take_profit_price))
+exit_short = (strategy.position_size < 0) and (crossover(fast_ma, slow_ma) or (strategy.position_avg_price >= stop_loss_price) or (strategy.position_avg_price <= take_profit_price))
+
+// 出场逻辑
+if exit_long
+    strategy.exit("Long", "Long", qty_percent=100, limit=take_profit_price, stop=stop_loss_price, from_entry="Long")
+
+if exit_short
+    strategy.exit("Short", "Short", qty_percent=100, limit=take_profit_price, stop=stop_loss_price, from_entry="Short")
+
+//@version=5
+strategy("Quantitative Trading Strategy")
+
+// 输入
+fastLen = input(title="Fast Length", type=input.integer, defval=10)
+slowLen = input(title="Slow Length", type=input.integer, defval=20)
+rsiLen = input(title="RSI Length", type=input.integer, defval=14)
+rsiOverbought = input(title="RSI Overbought", type=input.float, defval=70)
+rsiOversold = input(title="RSI Oversold", type=input.float, defval=30)
+riskPct = input(title="Risk Percentage", type=input.float, minval=0.0, maxval=100.0, defval=30.0)
+maxLossPct = input(title="Maximum Loss Percentage", type=input.float, minval=0.0, maxval=100.0, defval=10.0)
+
+// 快速均线
+fastMA = sma(close, fastLen)
+// 慢速均线
+slowMA = sma(close, slowLen)
+// RSI指标
+rsiValue = rsi(close, rsiLen)
+
+// 入场条件
+enterLong = crossover(fastMA, slowMA) and rsiValue < rsiOversold
+enterShort = crossunder(fastMA, slowMA) and rsiValue > rsiOverbought
+
+// 出场条件
+exitLong = crossunder(fastMA, slowMA)
+exitShort = crossover(fastMA, slowMA)
+
+// 计算交易量
+riskAmt = strategy.equity * riskPct / 100 / abs(entry_price - strategy.position_avg_price)
+// 最大亏损金额
+maxLossAmt = strategy.equity * maxLossPct / 100
+
+// 入场
+if (enterLong)
+    strategy.entry("Long", strategy.long, qty=riskAmt, comment="Long")
+if (enterShort)
+    strategy.entry("Short", strategy.short, qty=riskAmt, comment="Short")
+
+// 止损
+if (strategy.position_size > 0)
+    strategy.exit("Long Exit", "Long", qty=strategy.position_size, stop=strategy.position_avg_price - maxLossAmt, comment="Long Exit")
+if (strategy.position_size < 0)
+    strategy.exit("Short Exit", "Short", qty=abs(strategy.position_size), stop=strategy.position_avg_price + maxLossAmt, comment="Short Exit")
+
+// 止盈
+if (strategy.position_size > 0)
+    strategy.exit("Long Exit", "Long", qty=strategy.position_size, limit=strategy.position_avg_price + maxLossAmt * 1.5, comment="Long Exit")
+if (strategy.position_size < 0)
+    strategy.exit("Short Exit", "Short", qty=abs(strategy.position_size), limit=strategy.position_avg_price - maxLossAmt * 1.5, comment="Short Exit")
+
+//@version=5
+strategy("BTC Perpetual Contract Trading Strategy", overlay=true, margin_long=100, margin_short=100)
+
+// 声明参数
+percent_of_funds = input(30, title="Percent of Funds to Use", minval=1, maxval=100)
+stop_loss = input(10, title="Stop Loss Percentage", minval=1, maxval=100)
+take_profit = input(15, title="Take Profit Percentage", minval=1, maxval=100)
+
+// 声明变量
+long_entry = crossover(sma(close, 20), sma(close, 50)) // 短期均线上穿长期均线，做多信号
+short_entry = crossunder(sma(close, 20), sma(close, 50)) // 短期均线下穿长期均线，做空信号
+in_position = false
+
+// 计算止损和止盈价格
+stop_price = strategy.position_avg_price * (1 - stop_loss / 100)
+take_price = strategy.position_avg_price * (1 + take_profit / 100)
+
+// 入场条件
+if long_entry
+    // 计算可用资金
+    available_funds = strategy.equity * percent_of_funds / 100
+    
+    // 计算可以购买的合约数量
+    contract_size = ceil(available_funds / close * 10)
+    
+    // 设置做多仓位
+    strategy.entry("Long", strategy.long, qty=contract_size, comment="Long")
+    
+    // 将 in_position 标记为 true
+    in_position := true
+
+if short_entry
+    // 计算可用资金
+    available_funds = strategy.equity * percent_of_funds / 100
+    
+    // 计算可以卖空的合约数量
+    contract_size = ceil(available_funds / close * 10)
+    
+    // 设置做空仓位
+    strategy.entry("Short", strategy.short, qty=contract_size, comment="Short")
+    
+    // 将 in_position 标记为 true
+    in_position := true
+
+// 出场条件
+if in_position
+    // 设置止损和止盈出场
+    strategy.exit("Stop Loss", "Long", stop=stop_price, comment="Stop Loss")
+    strategy.exit("Take Profit", "Long", limit=take_price, comment="Take Profit")
+    strategy.exit("Stop Loss", "Short", stop=stop_price, comment="Stop Loss")
+    strategy.exit("Take Profit", "Short", limit=take_price, comment="Take Profit")
+    
+    // 将 in_position 标记为 false
+    in_position := false
